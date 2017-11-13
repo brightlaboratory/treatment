@@ -1,13 +1,19 @@
 /* SimpleApp.scala */
 
 
-import org.apache.spark.SparkContext
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object SimpleApp {
 
-  def countWords(sc: SparkContext): Unit = {
-    val pathToFiles = "/Users/newpc/work/research/healthsage/pom.xml"
-    val files = sc.textFile(pathToFiles)
-    println("Count: " + files.count())
+  def createDataframe(spark: SparkSession) = {
+
+    val df = spark.read
+      .option("header", "true") //reading the headers
+      .csv(getClass.getClassLoader.getResource("data.csv").getPath)
+
+    df.show()
+
+
   }
 }

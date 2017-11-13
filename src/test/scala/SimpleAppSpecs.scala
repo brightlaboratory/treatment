@@ -1,6 +1,9 @@
 
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfter, FlatSpec}
+
 
 class SimpleAppSpecs extends FlatSpec with BeforeAndAfter {
 
@@ -8,6 +11,7 @@ class SimpleAppSpecs extends FlatSpec with BeforeAndAfter {
   private val appName = "example-spark"
 
   private var sc: SparkContext = _
+  private var sparkSession: SparkSession = _
 
   before {
     val conf = new SparkConf()
@@ -15,6 +19,13 @@ class SimpleAppSpecs extends FlatSpec with BeforeAndAfter {
       .setAppName(appName)
 
     sc = new SparkContext(conf)
+    sparkSession = SparkSession.builder.
+      master(master)
+      .appName("spark session example")
+      .getOrCreate()
+
+    val rootLogger = Logger.getRootLogger()
+    rootLogger.setLevel(Level.ERROR)
   }
 
   after {
@@ -23,7 +34,7 @@ class SimpleAppSpecs extends FlatSpec with BeforeAndAfter {
     }
   }
 
-  "This test" should "count words" in {
-    SimpleApp.countWords(sc)
+  "This test" should "create dataframe" in {
+    SimpleApp.createDataframe(sparkSession)
   }
 }
