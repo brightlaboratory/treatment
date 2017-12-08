@@ -18,61 +18,112 @@ object SimpleApp {
       .option("header", "true") //reading the headers
       .csv(getClass.getClassLoader.getResource("data.csv").getPath)
 
-    //df.show()
-
     val df_new = df.select("AGE", "GENDER", "STFIPS", "SERVSETD", "NOPRIOR", "SUB1", "SUB2", "SUB3")
 
-
-    // Convert all columns into integer
-    //val someCastedDF = (df_new.columns.toBuffer).foldLeft(df_new)((current, c) =>current.withColumn(c, col(c).cast("int")))
-    //kMeansClustering(someCastedDF)
-
-    // Selecting columns to pass to the assignOriginalColumnLabels function
-
     val df_label=df.select("AGE","GENDER","RACE","EDUC","EMPLOY")
+    // Convert all columns into integer
     val someCastedDF = (df_label.columns.toBuffer).foldLeft(df_label)((current, c) =>current.withColumn(c, col(c).cast("int")))
     someCastedDF.printSchema()
-    assignOriginalColumnLabels(someCastedDF)
+
+    //kMeansClustering(someCastedDF)
+    calculateColumnValuePercentage(someCastedDF)
 
 
   }
+  //Calculate percentage of each unique range in a column
+
+  def calculateColumnValuePercentage(dataFrame: DataFrame)={
+
+    val total_records= dataFrame.count()
+    print(total_records)
 
 
-  def assignOriginalColumnLabels(dataFrame: DataFrame)={
+    // Count of unique values in columns and Adding Actual Name Labels to column AGE,GENDER,RACE. Creating three different dataframes
+
+    //AGE
+    val countAge=dataFrame.groupBy("AGE").count()
+    val ageDF=assignOriginalColumnLabelsAGE(countAge)
+
+    //GENDER
+    val countGENDER=dataFrame.groupBy("GENDER").count()
+    val genderDF=assignOriginalColumnLabelsGENDER(countGENDER)
+
+    //RACE
+    val countRace=dataFrame.groupBy("RACE").count()
+    val raceDF=assignOriginalColumnLabelsRACE(countRace)
+
+
+   // Calculating percentage of each unique value of AGE
+    def func_percentAge = udf((age:Int, count: Int) => {
+      if (age == 2)      (count/1048575.0)*100
+      else if (age == 3) (count/1048575.0)*100
+      else if (age == 4) (count/1048575.0)*100
+      else if (age == 5) (count/1048575.0)*100
+      else if (age == 6) (count/1048575.0)*100
+      else if (age == 7) (count/1048575.0)*100
+      else if (age == 8) (count/1048575.0)*100
+      else if (age == 9) (count/1048575.0)*100
+      else if (age == 10) (count/1048575.0)*100
+      else if (age == 11) (count/1048575.0)*100
+      else if (age == 12) (count/1048575.0)*100
+      else 0
+    })
+
+    val new_df1 = ageDF.withColumn("percentage", func_percentAge(col("AGE"),col("count")))
+
+    print("Final df of AGE with percentage is:\n")
+    new_df1.show()
+
+    /*val outputFile="ageData"
+    new_df1.write.option("header", "true").csv(outputFile)*/
+    new_df1.coalesce(1).write.option("header", "true").csv("/Users/anujatike/Documents/sem3/RA/Project2/HistogramData/ageData.csv")
+  }
+
+
+  def assignOriginalColumnLabelsAGE(dataFrame: DataFrame)= {
 
     dataFrame.show()
 
     // Adding Actual Name Labels to column AGE
 
     val func_age: (Int => String) = (age: Int) => {
-      if (age == 2) "12-14"
-      else if (age==3) "15-17"
-      else if (age==4) "18-20"
-      else if (age==5) "21-24"
-      else if (age==6) "25-29"
-      else if (age==7) "30-34"
-      else if (age==8) "35-39"
-      else if (age==9) "40-44"
-      else if (age==10) "45-49"
-      else if (age==11) "50-54"
-      else if (age==12) "55 AND OVER"
+      if      (age == 2) "12-14"
+      else if (age == 3) "15-17"
+      else if (age == 4) "18-20"
+      else if (age == 5) "21-24"
+      else if (age == 6) "25-29"
+      else if (age == 7) "30-34"
+      else if (age == 8) "35-39"
+      else if (age == 9) "40-44"
+      else if (age == 10) "45-49"
+      else if (age == 11) "50-54"
+      else if (age == 12) "55 AND OVER"
       else "MISSING/UNKNOWN/NOT COLLECTED/INVALID"
     }
     val func1 = udf(func_age)
 
-    val new_df1=dataFrame.withColumn("originalAGELabels", func1(col("AGE")))
+    val new_df1 = dataFrame.withColumn("originalAGELabels", func1(col("AGE")))
+    new_df1.show()
 
+    new_df1
+  }
+
+  def assignOriginalColumnLabelsGENDER(dataFrame: DataFrame)= {
     // Adding Actual Name Labels to column GENDER
 
     val func_gender: (Int => String) = (gender: Int) => {
       if (gender == 1) "MALE"
-      else if (gender==2) "FEMALE"
+      else if (gender == 2) "FEMALE"
       else "MISSING/UNKNOWN/NOT COLLECTED/INVALID"
     }
     val func2 = udf(func_gender)
-    val new_df2=new_df1.withColumn("originalGENDERLabels", func2(col("GENDER")))
+    val new_df2 = dataFrame.withColumn("originalGENDERLabels", func2(col("GENDER")))
+    new_df2.show()
+    new_df2
+  }
 
-   //Adding Actual Name Labels to column AGE
+  def assignOriginalColumnLabelsRACE(dataFrame: DataFrame)= {
+   //Adding Actual Name Labels to column RACE
 
     val func_race: (Int => String) = (race: Int) => {
       if  (race == 1) "ALASKA NATIVE (ALEUT, ESKIMO, INDIAN)"
@@ -87,81 +138,16 @@ object SimpleApp {
       else "MISSING/UNKNOWN/NOT COLLECTED/INVALID"
     }
     val func3 = udf(func_race)
-    val new_df3=new_df2.withColumn("originalRACELabels", func3(col("RACE")))
+    val new_df3=dataFrame.withColumn("originalRACELabels", func3(col("RACE")))
 
     new_df3.show()
-
-    //Calculate percentage of each unique range in a column
-    calculateColumnValuePercentage(new_df3)
-
-
+    new_df3
   }
 
-  //Calculate percentage of each unique range in a column
 
-  def calculateColumnValuePercentage(dataFrame: DataFrame)={
-
-   val total_records= dataFrame.count()
-    print(total_records)
-/*
-    dataFrame.createOrReplaceTempView("tempView")
-    val count_age_2 = dataFrame.sparkSession.sql("SELECT COUNT(AGE)" + "FROM tempView " +
-      "WHERE AGE==2")
-    print(count_age_2.dtypes)*/
-
-
-    // Count of unique values in columns
-    val countAge=dataFrame.groupBy("AGE").count()
-    val countGENDER=dataFrame.groupBy("GENDER").count()
-    val countRace=dataFrame.groupBy("RACE").count()
-
-    // Join counts with df
-    val joinedAGEdf=joinOnAGE(dataFrame,countAge)
-    val joinedGENDERdf=joinOnGENDER(joinedAGEdf,countGENDER)
-    val joinedFinaldf=joinOnRACE(joinedGENDERdf,countRace)
-
-
-    //joinedAGEdf.show()
-    //joinedGENDERdf.show()
-    joinedFinaldf.show()
-
-
-
-  }
-
-  //Joining count of each unique column value with original dataframe
-
-  def joinOnAGE(df1: DataFrame, df2: DataFrame) = {
-
-    val joinedDf = df1.join(df2, df1("AGE") === df2("AGE"), "inner")
-    joinedDf
-  }
-
-  def joinOnGENDER(df1: DataFrame, df2: DataFrame) = {
-
-    val joinedDf = df1.join(df2, df1("GENDER") === df2("GENDER"), "inner")
-    joinedDf
-  }
-
-  def joinOnRACE(df1: DataFrame, df2: DataFrame) = {
-
-    val joinedDf = df1.join(df2, df1("RACE") === df2("RACE"), "inner")
-    joinedDf
-  }
 
   def kMeansClustering(dataFrame: DataFrame)= {
 
-    /*
-    val encoder = new OneHotEncoder().setInputCol("AGE").setOutputCol("AGEVec")
-    val encoder2 = new OneHotEncoder().setInputCol("GENDER").setOutputCol("GENDERVec")
-    val assembler = new VectorAssembler().setInputCols(Array("AGEVec","GENDERVec")).setOutputCol("features")
-    val kmeans = new KMeans().setK(2).setFeaturesCol("features").setPredictionCol("prediction")
-
-    val pipeline = new Pipeline().setStages(Array(encoder,encoder2, assembler, kmeans))
-
-    val kMeansPredictionModel = pipeline.fit(dataFrame)
-
-    val predictionResult = kMeansPredictionModel.transform(dataFrame)*/
 
     //creating features column
     val assembler = new VectorAssembler()
