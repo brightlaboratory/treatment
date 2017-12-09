@@ -20,13 +20,23 @@ object SimpleApp {
 
     val df_new = df.select("AGE", "GENDER", "STFIPS", "SERVSETD", "NOPRIOR", "SUB1", "SUB2", "SUB3")
 
+    val stateRecordCount= df_new.groupBy("STFIPS").count()
+
+    stateRecordCount.sort("count").show()
+
+    stateRecordCount.coalesce(1).write.option("header", "true").csv("/Users/anujatike/Documents/sem3/RA/Project2/HistogramData/stateRecordCounts.csv")
+
+
+
+
     val df_label=df.select("AGE","GENDER","RACE","EDUC","EMPLOY")
+
     // Convert all columns into integer
     val someCastedDF = (df_label.columns.toBuffer).foldLeft(df_label)((current, c) =>current.withColumn(c, col(c).cast("int")))
     someCastedDF.printSchema()
 
     //kMeansClustering(someCastedDF)
-    calculateColumnValuePercentage(someCastedDF)
+   // calculateColumnValuePercentage(someCastedDF)
 
 
   }
@@ -34,8 +44,8 @@ object SimpleApp {
 
   def calculateColumnValuePercentage(dataFrame: DataFrame)={
 
+    //Calculating total records in a df
     val total_records= dataFrame.count()
-    print(total_records)
 
 
     // Count of unique values in columns and Adding Actual Name Labels to column AGE,GENDER,RACE. Creating three different dataframes
@@ -54,35 +64,32 @@ object SimpleApp {
 
 
    // Calculating percentage of each unique value of AGE
-    def func_percentAge = udf((age:Int, count: Int) => {
-      if (age == 2)      (count/1048575.0)*100
-      else if (age == 3) (count/1048575.0)*100
-      else if (age == 4) (count/1048575.0)*100
-      else if (age == 5) (count/1048575.0)*100
-      else if (age == 6) (count/1048575.0)*100
-      else if (age == 7) (count/1048575.0)*100
-      else if (age == 8) (count/1048575.0)*100
-      else if (age == 9) (count/1048575.0)*100
-      else if (age == 10) (count/1048575.0)*100
-      else if (age == 11) (count/1048575.0)*100
-      else if (age == 12) (count/1048575.0)*100
-      else 0
-    })
+   def func_percentAge = udf((age:Int, count: Int, totalCount: Long) => {
+     val totalCountDouble = totalCount.toDouble
+     if (age == 2)      (count/totalCountDouble)*100
+     else if (age == 3) (count/totalCountDouble)*100
+     else if (age == 4) (count/totalCountDouble)*100
+     else if (age == 5) (count/totalCountDouble)*100
+     else if (age == 6) (count/totalCountDouble)*100
+     else if (age == 7) (count/totalCountDouble)*100
+     else if (age == 8) (count/totalCountDouble)*100
+     else if (age == 9) (count/totalCountDouble)*100
+     else if (age == 10) (count/totalCountDouble)*100
+     else if (age == 11) (count/totalCountDouble)*100
+     else if (age == 12) (count/totalCountDouble)*100
+     else 0
+   })
 
-    val new_df1 = ageDF.withColumn("percentage", func_percentAge(col("AGE"),col("count")))
 
-    print("Final df of AGE with percentage is:\n")
-    new_df1.show()
+    // val new_df1 = ageDF.withColumn("percentage", func_percentAge(col("AGE"),col("count")))
+    val new_df1 = ageDF.withColumn("percentage", func_percentAge(col("AGE"),col("count"), lit(total_records)))
 
-    /*val outputFile="ageData"
-    new_df1.write.option("header", "true").csv(outputFile)*/
+    //Writing df into a file
     new_df1.coalesce(1).write.option("header", "true").csv("/Users/anujatike/Documents/sem3/RA/Project2/HistogramData/ageData.csv")
   }
 
 
   def assignOriginalColumnLabelsAGE(dataFrame: DataFrame)= {
-
-    dataFrame.show()
 
     // Adding Actual Name Labels to column AGE
 
@@ -103,7 +110,7 @@ object SimpleApp {
     val func1 = udf(func_age)
 
     val new_df1 = dataFrame.withColumn("originalAGELabels", func1(col("AGE")))
-    new_df1.show()
+
 
     new_df1
   }
@@ -118,7 +125,7 @@ object SimpleApp {
     }
     val func2 = udf(func_gender)
     val new_df2 = dataFrame.withColumn("originalGENDERLabels", func2(col("GENDER")))
-    new_df2.show()
+
     new_df2
   }
 
@@ -140,7 +147,6 @@ object SimpleApp {
     val func3 = udf(func_race)
     val new_df3=dataFrame.withColumn("originalRACELabels", func3(col("RACE")))
 
-    new_df3.show()
     new_df3
   }
 
