@@ -187,6 +187,10 @@ object SimpleApp {
 
   def predictTreatmentCompletion(preOrigDf: DataFrame) = {
 
+    preOrigDf.createOrReplaceTempView("DATA")
+    preOrigDf.sqlContext.sql("SELECT SERVSETD, LOS, REASON FROM DATA WHERE REASON = 1").show(10)
+    preOrigDf.sqlContext.sql("SELECT SERVSETD, LOS, REASON FROM DATA WHERE REASON <> 1").show(10)
+//    System.exit(0)
 
     val column = "REASON"
 
