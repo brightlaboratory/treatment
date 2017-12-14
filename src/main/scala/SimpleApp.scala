@@ -250,6 +250,7 @@ object SimpleApp {
       .setBlockSize(128)
       .setSeed(1234L)
       .setMaxIter(100)
+      .setSeed(1000) // To make the results reproducible
 
     // train the model
     val model = trainer.fit(train)
