@@ -7,6 +7,8 @@ import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer}
+import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 
 
 
@@ -18,28 +20,23 @@ object SimpleApp {
       .option("header", "true") //reading the headers
       .csv(getClass.getClassLoader.getResource("data.csv").getPath)
 
-    val df_new = df.select("AGE", "GENDER", "STFIPS", "SERVSETD", "NOPRIOR", "SUB1", "SUB2", "SUB3")
-
-    val stateRecordCount= df_new.groupBy("STFIPS").count()
-
-    stateRecordCount.sort("count").show()
-
-    stateRecordCount.coalesce(1).write.option("header", "true").csv("/Users/anujatike/Documents/sem3/RA/Project2/HistogramData/stateRecordCounts.csv")
-
-
-
-
-    val df_label=df.select("AGE","GENDER","RACE","EDUC","EMPLOY")
+    //Select 1) Age 2) Gender 3) Race 4) Ethnic 5) Marital Status 6) Education 7) Employment status 8) STFIPS
+    val df_new = df.select("AGE", "GENDER","RACE","ETHNIC","MARSTAT","EDUC","STFIPS","SUB1")
 
     // Convert all columns into integer
-    val someCastedDF = (df_label.columns.toBuffer).foldLeft(df_label)((current, c) =>current.withColumn(c, col(c).cast("int")))
+    val someCastedDF = (df_new.columns.toBuffer).foldLeft(df_new)((current, c) =>current.withColumn(c, col(c).cast("int")))
+
     someCastedDF.printSchema()
 
+     multilayerPerceptronClassifier(someCastedDF)
     //kMeansClustering(someCastedDF)
    // calculateColumnValuePercentage(someCastedDF)
 
 
   }
+
+
+
   //Calculate percentage of each unique range in a column
 
   def calculateColumnValuePercentage(dataFrame: DataFrame)={
@@ -163,6 +160,8 @@ object SimpleApp {
 
     val output = assembler.transform(dataFrame)
 
+
+
     val splitSeed = 5043
     val Array(trainingData, testData) = output.randomSplit(Array(0.7, 0.3), splitSeed)
 
@@ -186,6 +185,53 @@ object SimpleApp {
 
 
 
+  }
+
+  def multilayerPerceptronClassifier(dataFrame: DataFrame)={
+
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("AGE", "GENDER","RACE","ETHNIC","MARSTAT","EDUC","STFIPS"))
+      .setOutputCol("features")
+
+
+    val df2 = assembler.transform(dataFrame)
+
+
+    val labelIndexer = new StringIndexer().setInputCol("SUB1").setOutputCol("label")
+
+    val labelIndexerModel = labelIndexer.fit(df2)
+
+    val df3 = labelIndexer.fit(df2).transform(df2)
+
+
+    // Split the data into train and test
+    val splits = df3.randomSplit(Array(0.7, 0.3), seed = 1234L)
+    val train = splits(0)
+    val test = splits(1)
+
+    // specify layers for the neural network:
+    // input layer of size 4 (features), two intermediate of size 5 and 4
+    // and output of size 3 (classes)
+    val layers = Array[Int](7, 7, 7, 20)
+
+    // create the trainer and set its parameters
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(128)
+      .setSeed(1234L)
+      .setMaxIter(100)
+
+    // train the model
+    val model = trainer.fit(train)
+
+    // compute accuracy on the test set
+    val result = model.transform(test)
+
+    val predictionAndLabels = result.select("prediction", "label")
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+
+    println("Test set accuracy = " + evaluator.evaluate(predictionAndLabels))
   }
 
 }
