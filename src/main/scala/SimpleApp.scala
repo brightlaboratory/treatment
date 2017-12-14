@@ -25,8 +25,8 @@ object SimpleApp {
     val df_new = df.select("AGE", "GENDER","RACE","ETHNIC","MARSTAT","EDUC","STFIPS","SUB1")
     someCastedDF.printSchema()
 
-    predictTreatmentCompletion(someCastedDF)
-//    multilayerPerceptronClassifier(someCastedDF)
+//    predictTreatmentCompletion(someCastedDF)
+    multilayerPerceptronClassifier(df_new)
     //kMeansClustering(someCastedDF)
    // calculateColumnValuePercentage(someCastedDF)
 
