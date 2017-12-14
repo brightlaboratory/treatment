@@ -4,7 +4,7 @@
 import org.apache.spark.ml.classification.{MultilayerPerceptronClassifier, RandomForestClassifier}
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.ml.feature.{StringIndexer, VectorAssembler}
+import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorAssembler}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -185,8 +185,14 @@ object SimpleApp {
 
   }
 
-  def predictTreatmentCompletion(origDf: DataFrame) = {
+  def predictTreatmentCompletion(preOrigDf: DataFrame) = {
 
+
+    val column = "REASON"
+
+    // If the treatment is completed, it is 1, everything else is set to 0
+    val origDf = preOrigDf.withColumn(column, when(col(column).notEqual(1), 0).otherwise(1))
+    origDf.show(10)
 
     val labelIndexer = new StringIndexer().setInputCol("REASON").setOutputCol("label")
     val labelIndexerModel = labelIndexer.fit(origDf)
@@ -204,8 +210,6 @@ object SimpleApp {
     val splitSeed = 5043
     val Array(trainingData, testData) = df2.randomSplit(Array(0.7, 0.3), splitSeed)
 
-    // Random Forest Regresser
-
     val classifier = new RandomForestClassifier()
       .setImpurity("gini")
       .setMaxDepth(8)
@@ -219,8 +223,14 @@ object SimpleApp {
     println("model.featureImportances: " + model.featureImportances)
 
     val predictions = model.transform(testData)
-    predictions.select("SERVSETD", "METHUSE", "LOS", "SUB1",
-      "ROUTE1", "NUMSUBS", "DSMCRIT", "label", "prediction").show(50)
+
+    val converter = new IndexToString().setInputCol("prediction")
+      .setOutputCol("originalValue")
+      .setLabels(labelIndexerModel.labels)
+    val df3 = converter.transform(predictions)
+
+    df3.select("SERVSETD", "METHUSE", "LOS", "SUB1",
+      "ROUTE1", "NUMSUBS", "DSMCRIT", "REASON", "label", "prediction", "originalValue").show(5)
 
     val predictionAndLabels = predictions.select("prediction", "label")
     val evaluator = new MulticlassClassificationEvaluator()
