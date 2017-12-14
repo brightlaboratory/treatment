@@ -25,8 +25,8 @@ object SimpleApp {
     val df_new = df.select("AGE", "GENDER","RACE","ETHNIC","MARSTAT","EDUC","STFIPS","SUB1")
     someCastedDF.printSchema()
 
-//    predictTreatmentCompletion(someCastedDF)
-    multilayerPerceptronClassifier(df_new)
+    predictTreatmentCompletion(someCastedDF)
+//    multilayerPerceptronClassifier(df_new)
     //kMeansClustering(someCastedDF)
    // calculateColumnValuePercentage(someCastedDF)
 
@@ -187,8 +187,15 @@ object SimpleApp {
 
   def predictTreatmentCompletion(origDf: DataFrame) = {
 
-    val df = origDf.withColumn("label", origDf("REASON"))
-    df.printSchema()
+
+    val labelIndexer = new StringIndexer().setInputCol("REASON").setOutputCol("label")
+    val labelIndexerModel = labelIndexer.fit(origDf)
+    val df = labelIndexerModel.transform(origDf)
+//
+//    val df = dfMod.withColumn("label", dfMod("REASON"))
+//    df.printSchema()
+//    df.show(5)
+
 
     val assembler = new VectorAssembler().setInputCols(Array("SERVSETD", "METHUSE", "LOS", "SUB1",
       "ROUTE1", "NUMSUBS", "DSMCRIT")).setOutputCol("features")
@@ -215,6 +222,11 @@ object SimpleApp {
     predictions.select("SERVSETD", "METHUSE", "LOS", "SUB1",
       "ROUTE1", "NUMSUBS", "DSMCRIT", "label", "prediction").show(50)
 
+    val predictionAndLabels = predictions.select("prediction", "label")
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+
+    println("Test set accuracy = " + evaluator.evaluate(predictionAndLabels))
   }
 
   def multilayerPerceptronClassifier(dataFrame: DataFrame)={
