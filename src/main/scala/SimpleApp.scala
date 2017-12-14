@@ -1,14 +1,12 @@
 /* SimpleApp.scala */
 
 
+import org.apache.spark.ml.classification.{MultilayerPerceptronClassifier, RandomForestClassifier}
+import org.apache.spark.ml.clustering.KMeans
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+import org.apache.spark.ml.feature.{StringIndexer, VectorAssembler}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.ml.clustering.KMeans
-import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer}
-import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 
 
 
@@ -20,15 +18,15 @@ object SimpleApp {
       .option("header", "true") //reading the headers
       .csv(getClass.getClassLoader.getResource("data.csv").getPath)
 
+    // Convert all columns into integer
+    val someCastedDF = (df.columns.toBuffer).foldLeft(df)((current, c) =>current.withColumn(c, col(c).cast("int")))
+
     //Select 1) Age 2) Gender 3) Race 4) Ethnic 5) Marital Status 6) Education 7) Employment status 8) STFIPS
     val df_new = df.select("AGE", "GENDER","RACE","ETHNIC","MARSTAT","EDUC","STFIPS","SUB1")
-
-    // Convert all columns into integer
-    val someCastedDF = (df_new.columns.toBuffer).foldLeft(df_new)((current, c) =>current.withColumn(c, col(c).cast("int")))
-
     someCastedDF.printSchema()
 
-     multilayerPerceptronClassifier(someCastedDF)
+    predictTreatmentCompletion(someCastedDF)
+//    multilayerPerceptronClassifier(someCastedDF)
     //kMeansClustering(someCastedDF)
    // calculateColumnValuePercentage(someCastedDF)
 
@@ -184,6 +182,38 @@ object SimpleApp {
     model.clusterCenters.foreach(println)
 
 
+
+  }
+
+  def predictTreatmentCompletion(origDf: DataFrame) = {
+
+    val df = origDf.withColumn("label", origDf("REASON"))
+    df.printSchema()
+
+    val assembler = new VectorAssembler().setInputCols(Array("SERVSETD", "METHUSE", "LOS", "SUB1",
+      "ROUTE1", "NUMSUBS", "DSMCRIT")).setOutputCol("features")
+    val df2 = assembler.transform(df)
+
+    val splitSeed = 5043
+    val Array(trainingData, testData) = df2.randomSplit(Array(0.7, 0.3), splitSeed)
+
+    // Random Forest Regresser
+
+    val classifier = new RandomForestClassifier()
+      .setImpurity("gini")
+      .setMaxDepth(8)
+      .setNumTrees(20)
+      .setMaxBins(100)
+      .setFeatureSubsetStrategy("auto")
+      .setSeed(5043)
+
+    val model = classifier.fit(trainingData)
+    println("Random Forest Regresser model: " + model.toDebugString)
+    println("model.featureImportances: " + model.featureImportances)
+
+    val predictions = model.transform(testData)
+    predictions.select("SERVSETD", "METHUSE", "LOS", "SUB1",
+      "ROUTE1", "NUMSUBS", "DSMCRIT", "label", "prediction").show(50)
 
   }
 
