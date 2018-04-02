@@ -9,7 +9,25 @@ import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorAssemble
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
+object PredictApp {
+  
+  def main(args:Array[String]){
+    
+    val conf = new SparkConf()
+    conf.set("spark.master", "local")
+    conf.set("spark.app.name", "exampleSpark")
+    val sc = new SparkContext(conf)
+    
+    val sparkSession = SparkSession.builder.
+      master("local")
+      .appName("spark session example")
+      .getOrCreate()
 
+    SimpleApp.createDataframe(sparkSession)
+    
+  }
+    
+}
 
 object SimpleApp {
 
