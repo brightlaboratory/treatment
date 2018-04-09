@@ -216,19 +216,26 @@ object SimpleApp {
     // If the treatment is completed, it is 1, everything else is set to 0
     val origDf = preOrigDf.withColumn(column, when(col(column).notEqual(1), 0).otherwise(1))
     origDf.show(10)
+    
+    val changeDf = origDf.select(origDf("SERVSETD") + 1 as "cSERVSETD",origDf("METHUSE"), origDf("LOS")  as "cLOS", origDf("SUB1"),  origDf("ROUTE1"), origDf("NUMSUBS"), origDf("DSMCRIT"), origDf("REASON"))
+    changeDf.show(10)
 
     val labelIndexer = new StringIndexer().setInputCol("REASON").setOutputCol("label")
-    val labelIndexerModel = labelIndexer.fit(origDf)
-    val df = labelIndexerModel.transform(origDf)
-//
+    val labelIndexerModel = labelIndexer.fit(changeDf)
+    val df = labelIndexerModel.transform(changeDf)
+    df.show(10)
 //    val df = dfMod.withColumn("label", dfMod("REASON"))
 //    df.printSchema()
 //    df.show(5)
 
-
-    val assembler = new VectorAssembler().setInputCols(Array("SERVSETD", "METHUSE", "LOS", "SUB1",
+    df.createOrReplaceTempView("average")
+    df.sqlContext.sql("SELECT avg(cSERVSETD) as avgSERVSETD  FROM average GROUP BY REASON having REASON == 1 ").show
+    
+    val assembler = new VectorAssembler().setInputCols(Array("cSERVSETD", "METHUSE", "LOS", "SUB1",
       "ROUTE1", "NUMSUBS", "DSMCRIT")).setOutputCol("features")
     val df2 = assembler.transform(df)
+    df2.describe("cSERVSETD").show
+    df2.show(10)
 
     val splitSeed = 5043
     val Array(trainingData, testData) = df2.randomSplit(Array(0.7, 0.3), splitSeed)
@@ -246,6 +253,7 @@ object SimpleApp {
     println("model.featureImportances: " + model.featureImportances)
 
     val predictions = model.transform(testData)
+    predictions.show(10)
 
     val converter = new IndexToString().setInputCol("prediction")
       .setOutputCol("originalValue")
