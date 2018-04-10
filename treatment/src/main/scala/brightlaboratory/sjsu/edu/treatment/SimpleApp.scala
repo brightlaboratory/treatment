@@ -2,6 +2,7 @@
 
 package brightlaboratory.sjsu.edu.treatment;
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.classification.{MultilayerPerceptronClassifier, RandomForestClassifier}
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
