@@ -1,5 +1,6 @@
 *.class
 /target
-treatment/.*
+treatment/.idea
 *.jar
 .metadata/
+treatment/treatment/src/main/resources/*
