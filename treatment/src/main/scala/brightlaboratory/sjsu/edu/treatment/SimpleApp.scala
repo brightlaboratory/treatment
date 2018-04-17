@@ -40,6 +40,7 @@ object SimpleApp {
 
     // Convert all columns into integer
     val someCastedDF = (df.columns.toBuffer).foldLeft(df)((current, c) =>current.withColumn(c, col(c).cast("int")))
+    print(1)
 
     //Select 1) Age 2) Gender 3) Race 4) Ethnic 5) Marital Status 6) Education 7) Employment status 8) STFIPS
     val df_new = df.select("AGE", "GENDER","RACE","ETHNIC","MARSTAT","EDUC","STFIPS","SUB1")
