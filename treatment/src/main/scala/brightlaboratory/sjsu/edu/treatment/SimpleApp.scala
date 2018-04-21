@@ -15,19 +15,15 @@ import org.apache.log4j.{Level, Logger}
 object PredictApp {
   /*
     def main(args:Array[String]){
-
       val conf = new SparkConf()
       conf.set("spark.master", "local")
       conf.set("spark.app.name", "exampleSpark")
       val sc = new SparkContext(conf)
-
       val sparkSession = SparkSession.builder.
         master("local")
         .appName("spark session example")
         .getOrCreate()
-
       SimpleApp.createDataframe(sparkSession)
-
     }
       */
 }
@@ -96,35 +92,29 @@ object SimpleApp {
         "where a.REASON <> 1 " +
         "order by CASEID")
 
-  /*  val newDF = NEW_SERVSETD_FAILURE.select(NEW_SERVSETD_FAILURE("SERVSETD") + 1 as "cSERVSETD", NEW_SERVSETD_FAILURE("METHUSE"),
+  /* val newDF = NEW_SERVSETD_FAILURE.select(NEW_SERVSETD_FAILURE("SERVSETD") + 1 as "cSERVSETD", NEW_SERVSETD_FAILURE("METHUSE"),
       NEW_SERVSETD_FAILURE("LOS")  as "cLOS", NEW_SERVSETD_FAILURE("SUB1"),
       NEW_SERVSETD_FAILURE("ROUTE1"), NEW_SERVSETD_FAILURE("NUMSUBS"), NEW_SERVSETD_FAILURE("DSMCRIT"),
       NEW_SERVSETD_FAILURE("REASON"),NEW_SERVSETD_FAILURE("Original_Rank"))
-    println("input for creating test data")
-    newDF.show(10)
-    NEW_SERVSETD_FAILURE.show(5)
+      println("input for creating test data")
+      newDF.show(10)
+      NEW_SERVSETD_FAILURE.show(5)
+      //creating data for higher ranks only
+      NEW_SERVSETD_FAILURE.createOrReplaceTempView("final")
+      val finalDF = spark.sql("select a.*, b.CASEID as case` from final a inner join final b ON a.CASEID = b.CASEID AND a.Original_Rank < b.RANK")
+      println("Result of self join")
+      finalDF.show(1)
+      //NEW_SERVSETD_FAILURE.select("CASEID", "REASON","DISYR","SERVSETD","DERIVED_SERV").show(20)
+      //println(NEW_SERVSETD_FAILURE.count())
+      //Saving the dataset
+      NEW_SERVSETD_FAILURE.coalesce(1)
+        .write.format("com.databricks.spark.csv")
+        .option("header", "true")
+        .save("/home/heemany/Documents/treatment/TestData.csv")
 
-    //creating data for higher ranks only
-    NEW_SERVSETD_FAILURE.createOrReplaceTempView("final")
-    val finalDF = spark.sql("select a.*, b.CASEID as case` from final a inner join final b ON a.CASEID = b.CASEID AND a.Original_Rank < b.RANK")
-    println("Result of self join")
-    finalDF.show(1)
-    //NEW_SERVSETD_FAILURE.select("CASEID", "REASON","DISYR","SERVSETD","DERIVED_SERV").show(20)
-    //println(NEW_SERVSETD_FAILURE.count())
-
-    //Saving the dataset
-    NEW_SERVSETD_FAILURE.coalesce(1)
-      .write.format("com.databricks.spark.csv")
-      .option("header", "true")
-      .save("/home/heemany/Documents/treatment/TestData.csv")
-
-
-
-
-
-    predictTreatmentSuccess(someCastedDF, NEW_SERVSETD_FAILURE)*/
-
-    predictTreatmentCompletion(someCastedDF)
+  */
+    predictTreatmentSuccess(someCastedDF, NEW_SERVSETD_FAILURE)
+    //predictTreatmentCompletion(someCastedDF)
     //multilayerPerceptronClassifier(df_new)
     //kMeansClustering(someCastedDF)
     // calculateColumnValuePercentage(someCastedDF)
@@ -288,34 +278,22 @@ object SimpleApp {
     // If the treatment is completed, it is 1, everything else is set to 0
     val column = "REASON"
     val origDf = preOrigDf.withColumn(column, when(col(column).notEqual(1), 0).otherwise(1))
-    origDf.show(10)
-
-    val changeDf = origDf.select(origDf("SERVSETD") as "cSERVSETD", origDf("METHUSE"), origDf("LOS")  as "cLOS", origDf("SUB1"),  origDf("ROUTE1"), origDf("NUMSUBS"), origDf("DSMCRIT"), origDf("REASON"))
-    //changeDf.show(10)
+    val changeDf = origDf.select(origDf("CASEID"),origDf("SERVSETD") as "cSERVSETD", origDf("METHUSE"), origDf("LOS")  as "cLOS", origDf("SUB1"),  origDf("ROUTE1"), origDf("NUMSUBS"), origDf("DSMCRIT"), origDf("REASON"))
 
     val labelIndexer = new StringIndexer().setInputCol("REASON").setOutputCol("label")
     val labelIndexerModel = labelIndexer.fit(changeDf)
     val df = labelIndexerModel.transform(changeDf)
     //df.show(10)
 
-    df.createOrReplaceTempView("average")
-    df.sqlContext.sql("SELECT avg(cSERVSETD) as avgSERVSETD  FROM average GROUP BY REASON having REASON == 1 ").show
-
-    val assembler = new VectorAssembler().setInputCols(Array("cSERVSETD", "METHUSE", "cLOS", "SUB1",
+    val assembler = new VectorAssembler().setInputCols(Array("CASEID", "cSERVSETD", "METHUSE", "cLOS", "SUB1",
       "ROUTE1", "NUMSUBS", "DSMCRIT")).setOutputCol("features")
     val trainingData = assembler.transform(df)
-
-    /* not needed as we use the whole data set for training now
-    val splitSeed = 5043
-    val Array(trainingData, testData) = df2.randomSplit(Array(1.0, 0.0), splitSeed)
-    trainingData.show(10)
-    */
 
     //creating the test data using NEW_SERVSETD_FAILURE
     val test_column = "REASON"
     // If the treatment is completed, it is 1, everything else is set to 0
     val newdf = NEW_SERVSETD_FAILURE.withColumn(test_column, when(col(test_column).notEqual(1), 0).otherwise(1))
-    val changetestDf = newdf.select(newdf("DERIVED_SERV")  as "cSERVSETD", newdf("METHUSE"), newdf("LOS")  as "cLOS", newdf("SUB1"),  newdf("ROUTE1"), newdf("NUMSUBS"), newdf("DSMCRIT"), newdf("REASON"))
+    val changetestDf = newdf.select(newdf("CASEID"), newdf("DERIVED_SERV")  as "cSERVSETD", newdf("METHUSE"), newdf("LOS")  as "cLOS", newdf("SUB1"),  newdf("ROUTE1"), newdf("NUMSUBS"), newdf("DSMCRIT"), newdf("REASON"))
     //changetestDf.show(10)
 
     val testlabelIndexer = new StringIndexer().setInputCol("REASON").setOutputCol("label")
@@ -327,14 +305,14 @@ object SimpleApp {
     //    df.show(5)
 
     testdf.createOrReplaceTempView("testaverage")
-    testdf.sqlContext.sql("SELECT avg(cSERVSETD) as avgSERVSETD  FROM testaverage GROUP BY REASON having REASON == 1 ").show
+    //testdf.sqlContext.sql("SELECT avg(cSERVSETD) as avgSERVSETD  FROM testaverage GROUP BY REASON having REASON == 1 ").show
 
-    val testassembler = new VectorAssembler().setInputCols(Array("cSERVSETD", "METHUSE", "cLOS", "SUB1",
+    val testassembler = new VectorAssembler().setInputCols(Array("CASEID", "cSERVSETD", "METHUSE", "cLOS", "SUB1",
       "ROUTE1", "NUMSUBS", "DSMCRIT")).setOutputCol("features")
     val testData = testassembler.transform(testdf)
-    testData.describe("cSERVSETD").show
-    print("below is the test data")
-    testData.show(10)
+    //testData.describe("cSERVSETD").show
+    //print("below is the test data")
+    //testData.show(10)
 
     val classifier = new RandomForestClassifier()
       .setImpurity("gini")
@@ -349,15 +327,24 @@ object SimpleApp {
     println("model.featureImportances: " + model.featureImportances)
 
     val predictions = model.transform(testData)
-    predictions.show(10)
+    //predictions.show(10)
+
 
     val converter = new IndexToString().setInputCol("prediction")
       .setOutputCol("originalValue")
       .setLabels(labelIndexerModel.labels)
     val df3 = converter.transform(predictions)
 
-    df3.select("cSERVSETD", "METHUSE", "cLOS", "SUB1",
-      "ROUTE1", "NUMSUBS", "DSMCRIT", "REASON", "label", "prediction", "originalValue").show(5)
+    val saveTable = df3.select("CASEID", "cSERVSETD", "METHUSE", "cLOS", "SUB1",
+      "ROUTE1", "NUMSUBS", "DSMCRIT", "REASON", "label", "prediction", "originalValue")
+
+    saveTable.coalesce(1)
+      .write.format("com.databricks.spark.csv")
+      .option("header", "true")
+      .save("/home/heemany/Documents/treatment/Analysis.csv")
+
+    df3.createOrReplaceTempView("Table1")
+    df3.sqlContext.sql("select COUNT(distinct CASEID) as count from Table1").show()
 
     val predictionAndLabels = predictions.select("prediction", "label")
     val evaluator = new MulticlassClassificationEvaluator()
@@ -368,52 +355,52 @@ object SimpleApp {
 
 
 
-      def multilayerPerceptronClassifier(dataFrame: DataFrame)={
+  def multilayerPerceptronClassifier(dataFrame: DataFrame)={
 
-        val assembler = new VectorAssembler()
-          .setInputCols(Array("AGE", "GENDER","RACE","ETHNIC","MARSTAT","EDUC","STFIPS"))
-          .setOutputCol("features")
-
-
-        val df2 = assembler.transform(dataFrame)
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("AGE", "GENDER","RACE","ETHNIC","MARSTAT","EDUC","STFIPS"))
+      .setOutputCol("features")
 
 
-        val labelIndexer = new StringIndexer().setInputCol("SUB1").setOutputCol("label")
-
-        val labelIndexerModel = labelIndexer.fit(df2)
-
-        val df3 = labelIndexer.fit(df2).transform(df2)
+    val df2 = assembler.transform(dataFrame)
 
 
-        // Split the data into train and test
-        val splits = df3.randomSplit(Array(0.7, 0.3), seed = 1234L)
-        val train = splits(0)
-        val test = splits(1)
+    val labelIndexer = new StringIndexer().setInputCol("SUB1").setOutputCol("label")
 
-        // specify layers for the neural network:
-        // input layer of size 4 (features), two intermediate of size 5 and 4
-        // and output of size 3 (classes)
-        val layers = Array[Int](7, 7, 7, 20)
+    val labelIndexerModel = labelIndexer.fit(df2)
 
-        // create the trainer and set its parameters
-        val trainer = new MultilayerPerceptronClassifier()
-          .setLayers(layers)
-          .setBlockSize(128)
-          .setSeed(1234L)
-          .setMaxIter(100)
-          .setSeed(1000) // To make the results reproducible
+    val df3 = labelIndexer.fit(df2).transform(df2)
 
-        // train the model
-        val model = trainer.fit(train)
 
-        // compute accuracy on the test set
-        val result = model.transform(test)
+    // Split the data into train and test
+    val splits = df3.randomSplit(Array(0.7, 0.3), seed = 1234L)
+    val train = splits(0)
+    val test = splits(1)
 
-        val predictionAndLabels = result.select("prediction", "label")
-        val evaluator = new MulticlassClassificationEvaluator()
-          .setMetricName("accuracy")
+    // specify layers for the neural network:
+    // input layer of size 4 (features), two intermediate of size 5 and 4
+    // and output of size 3 (classes)
+    val layers = Array[Int](7, 7, 7, 20)
 
-        println("Test set accuracy = " + evaluator.evaluate(predictionAndLabels))
+    // create the trainer and set its parameters
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(128)
+      .setSeed(1234L)
+      .setMaxIter(100)
+      .setSeed(1000) // To make the results reproducible
+
+    // train the model
+    val model = trainer.fit(train)
+
+    // compute accuracy on the test set
+    val result = model.transform(test)
+
+    val predictionAndLabels = result.select("prediction", "label")
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+
+    println("Test set accuracy = " + evaluator.evaluate(predictionAndLabels))
 
   }
 
@@ -425,7 +412,7 @@ object SimpleApp {
     val origDf = preOrigDf.withColumn(column, when(col(column).notEqual(1), 0).otherwise(1))
     //origDf.show(10)
 
-    val changeDf = origDf.select(origDf("SERVSETD") + 1 as "cSERVSETD",origDf("METHUSE"), origDf("LOS")  as "cLOS", origDf("SUB1"),  origDf("ROUTE1"), origDf("NUMSUBS"), origDf("DSMCRIT"), origDf("REASON"))
+    val changeDf = origDf.select(origDf("CASEID"), origDf("SERVSETD") + 1 as "cSERVSETD",origDf("METHUSE"), origDf("LOS")  as "cLOS", origDf("SUB1"),  origDf("ROUTE1"), origDf("NUMSUBS"), origDf("DSMCRIT"), origDf("REASON"))
     //changeDf.show(10)
 
     val labelIndexer = new StringIndexer().setInputCol("REASON").setOutputCol("label")
@@ -434,9 +421,9 @@ object SimpleApp {
     //df.show(10)
 
     df.createOrReplaceTempView("average")
-    df.sqlContext.sql("SELECT avg(cSERVSETD) as avgSERVSETD  FROM average GROUP BY REASON having REASON == 1 ").show
+    //df.sqlContext.sql("SELECT avg(cSERVSETD) as avgSERVSETD  FROM average GROUP BY REASON having REASON == 1 ").show
 
-    val assembler = new VectorAssembler().setInputCols(Array("cSERVSETD", "METHUSE", "cLOS", "SUB1",
+    val assembler = new VectorAssembler().setInputCols(Array("CASEID", "cSERVSETD", "METHUSE", "cLOS", "SUB1",
       "ROUTE1", "NUMSUBS", "DSMCRIT")).setOutputCol("features")
     val df2 = assembler.transform(df)
     //df2.describe("cSERVSETD").show
@@ -460,19 +447,18 @@ object SimpleApp {
     val predictions = model.transform(testData)
     predictions.show(10)
 
+
     val converter = new IndexToString().setInputCol("prediction")
       .setOutputCol("originalValue")
       .setLabels(labelIndexerModel.labels)
     val df3 = converter.transform(predictions)
 
-    df3.select("cSERVSETD", "METHUSE", "cLOS", "SUB1",
-      "ROUTE1", "NUMSUBS", "DSMCRIT", "REASON", "label", "prediction", "originalValue").show(5)
-
+    df3.select("CASEID","cSERVSETD", "METHUSE", "cLOS", "SUB1",
+      "ROUTE1", "NUMSUBS", "DSMCRIT", "REASON", "label", "prediction", "originalValue")
     val predictionAndLabels = predictions.select("prediction", "label")
     val evaluator = new MulticlassClassificationEvaluator()
       .setMetricName("accuracy")
 
     println("Test set accuracy = " + evaluator.evaluate(predictionAndLabels))
   }
-
 }
