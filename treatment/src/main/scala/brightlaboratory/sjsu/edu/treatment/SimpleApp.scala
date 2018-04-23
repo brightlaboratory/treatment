@@ -3,13 +3,14 @@
 package brightlaboratory.sjsu.edu.treatment;
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.ml.classification.{MultilayerPerceptronClassifier, RandomForestClassifier}
+import org.apache.spark.ml.classification.{MultilayerPerceptronClassifier, RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorAssembler}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.log4j.{Level, Logger}
+import org.apache.spark.sql.functions.typedLit
 
 
 object PredictApp {
@@ -113,7 +114,10 @@ object SimpleApp {
         .save("/home/heemany/Documents/treatment/TestData.csv")
 
   */
-    predictTreatmentSuccess(someCastedDF, NEW_SERVSETD_FAILURE)
+//    predictTreatmentSuccess(someCastedDF, NEW_SERVSETD_FAILURE)
+
+    predictTreatmentSuccessAndModifySERVSETD(someCastedDF, finalDF)
+
     //predictTreatmentCompletion(someCastedDF)
     //multilayerPerceptronClassifier(df_new)
     //kMeansClustering(someCastedDF)
@@ -273,6 +277,121 @@ object SimpleApp {
 
   }
 
+  def predictTreatmentSuccessAndModifySERVSETD(preOrigDf: DataFrame, rankDf:
+  DataFrame) = {
+    // If the treatment is completed, it is 1, everything else is set to 0
+    val column = "REASON"
+    val origDf = preOrigDf.withColumn(column, when(col(column).notEqual(1), 0).otherwise(1))
+    val changeDf = origDf.select(origDf("CASEID"),origDf("SERVSETD") as "cSERVSETD", origDf("METHUSE"), origDf("LOS")  as "cLOS", origDf("SUB1"),  origDf("ROUTE1"), origDf("NUMSUBS"), origDf("DSMCRIT"), origDf("REASON"))
+
+    val labelIndexer = new StringIndexer().setInputCol("REASON").setOutputCol("label")
+    val labelIndexerModel = labelIndexer.fit(changeDf)
+    val df = labelIndexerModel.transform(changeDf)
+    //df.show(10)
+
+    val assembler = new VectorAssembler().setInputCols(Array("CASEID", "cSERVSETD", "METHUSE", "cLOS", "SUB1",
+      "ROUTE1", "NUMSUBS", "DSMCRIT")).setOutputCol("features")
+    val df2 = assembler.transform(df)
+
+    // Split the data into train and test
+    val splits = df2.randomSplit(Array(0.7, 0.3), seed = 1234L)
+    val trainingData = splits(0)
+    val testData = splits(1)
+
+
+    val classifier = new RandomForestClassifier()
+      .setImpurity("gini")
+      .setMaxDepth(8)
+      .setNumTrees(20)
+      .setMaxBins(100)
+      .setFeatureSubsetStrategy("auto")
+      .setSeed(5043)
+
+    val model = classifier.fit(trainingData)
+//    println("Random Forest Regresser model: " + model.toDebugString)
+    println("model.featureImportances: " + model.featureImportances)
+
+    val predictions = model.transform(testData)
+    println("PREDICTIONS:")
+    predictions.show(10)
+    println("testData.count(): " + testData.count())
+
+    val converter = new IndexToString().setInputCol("prediction")
+      .setOutputCol("originalValue")
+      .setLabels(labelIndexerModel.labels)
+    val df3 = converter.transform(predictions)
+
+    df3.createOrReplaceTempView("Table1")
+
+    val predictionAndLabels = predictions.select("prediction", "label")
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+
+    println("Test set accuracy = " + evaluator.evaluate(predictionAndLabels))
+
+    // Consider all rows whose PREDICTION = 0
+    // Consider all rows whose PREDICTION = 0
+    val failedRows = predictions.where(predictions("prediction") === 0.0)
+    increaseSERVSETD(failedRows, model, rankDf)
+  }
+
+
+  def increaseServiceSetting = udf((cSERVSETD:Int, SERVSETD_to_rank_map:
+  Seq[Int]) => {
+
+//    SERVSETD_to_rank_map.zipWithIndex.foreach(v => println("ZIP: " + v))
+//    sys.exit(0)
+
+//    val nextIndex = SERVSETD_to_rank_map.zipWithIndex.filter(v => v._1 ==
+//      cSERVSETD)
+//      .head._2 + 1
+    val nextIndex = SERVSETD_to_rank_map.indexOf(cSERVSETD) + 1
+    println("nextIndex: " + nextIndex)
+    SERVSETD_to_rank_map{nextIndex}
+  })
+
+  def increaseSERVSETD(failedRows: DataFrame, model:
+  RandomForestClassificationModel, rankDf: DataFrame) = {
+
+    val maxRowd = rankDf.select(max("rowd")).collect() {
+      0
+    }.getLong(0)
+
+    val hightestSERSETD = rankDf.select("SERVSETD").where(rankDf("rowd") ===
+      maxRowd)
+      .collect() {
+        0
+      }
+      .getInt(0)
+
+    // We will filter highest ranked rows because their service setting
+    // cannot be increased
+    val promisingRows = failedRows.filter(failedRows("cSERVSETD") =!=
+      hightestSERSETD)
+
+    rankDf.printSchema()
+    println("rankDf:")
+    rankDf.show(100, truncate = false)
+    val SERVSETD_to_rank_map =
+      rankDf.drop("rank").collect().map(row => row.getInt(0))
+
+    SERVSETD_to_rank_map.take(10).foreach(v => println("ROW: " + v))
+//    sys.exit(0)
+
+
+//    promisingRows.drop("cSERVSETD")
+
+   val SERVSETD_to_rank_list = SERVSETD_to_rank_map.toSeq
+
+   val promisingRowsMod = promisingRows.withColumn("cSERVSETDNew",
+      increaseServiceSetting
+    (promisingRows("cSERVSETD"), typedLit(SERVSETD_to_rank_list) ))
+
+    promisingRowsMod.show(5, truncate = false)
+  }
+
+
+
   def predictTreatmentSuccess(preOrigDf: DataFrame, NEW_SERVSETD_FAILURE: DataFrame) = {
 
     // If the treatment is completed, it is 1, everything else is set to 0
@@ -341,7 +460,7 @@ object SimpleApp {
     saveTable.coalesce(1)
       .write.format("com.databricks.spark.csv")
       .option("header", "true")
-      .save("/home/heemany/Documents/treatment/Analysis.csv")
+      .save("/Users/newpc/work/research/treatment/treatment/src/main/Analysis.csv")
 
     df3.createOrReplaceTempView("Table1")
     df3.sqlContext.sql("select COUNT(distinct CASEID) as count from Table1").show()
