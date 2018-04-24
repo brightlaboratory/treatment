@@ -388,6 +388,9 @@ object SimpleApp {
     (promisingRows("cSERVSETD"), typedLit(SERVSETD_to_rank_list) ))
 
     promisingRowsMod.show(5, truncate = false)
+
+    // Run the rows of promisingRowsMod through the model to see how many of
+    // those are not SUCCESS
   }
 
 
