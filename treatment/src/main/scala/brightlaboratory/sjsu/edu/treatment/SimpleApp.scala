@@ -59,8 +59,8 @@ object SimpleApp {
     //for each SERVSETD category calculate it's success and failure probability
     SERVSETD_success.createOrReplaceTempView("SERVSETD_success")
     SERVSETD_failure.createOrReplaceTempView("SERVSETD_failure")
-    val success_prob = spark.sql(s"select SERVSETD, Round(count/${total_success}, 3) as s_prob from SERVSETD_success ")
-    val failure_prob = spark.sql(s"select SERVSETD, Round(count/${total_failure{0}}, 3) as f_prob from SERVSETD_failure ")
+    val success_prob = spark.sql(s"select SERVSETD, Round(count/${total_success}, 3) as s_prob from SERVSETD_success")
+    val failure_prob = spark.sql(s"select SERVSETD, Round(count/${total_failure{0}}, 3) as f_prob from SERVSETD_failure")
     //success_prob.show()
     //failure_prob.show()
 
@@ -68,53 +68,14 @@ object SimpleApp {
     success_prob.createOrReplaceTempView("success_prob")
     failure_prob.createOrReplaceTempView("failure_prob")
     val SERVSETD_rankDf = spark.sql("select a.SERVSETD, Round(a.s_prob/b.f_prob , 3) " +
-      "as rank from success_prob a inner join failure_prob b ON a.SERVSETD = b.SERVSETD order by rank ASC")
-    println("Rank of SERVSETD")
-    val finalDF = SERVSETD_rankDf.withColumn("rowd",monotonically_increasing_id()+1)
-    finalDF.show()
+      "as score from success_prob a inner join failure_prob b ON a.SERVSETD = b.SERVSETD order by score ASC")
+    SERVSETD_rankDf.createOrReplaceTempView("score_table")
+    //val finalDF = SERVSETD_rankDf.withColumn("rowd",monotonically_increasing_id()+1)
+    val finalDF = spark.sql("select SERVSETD, score, RANK() OVER (ORDER BY score ASC) as rank from score_table")
+    //finalDF.show()
+    //println("Rank of SERVSETD")
 
-
-    SERVSETD_rankDf.createOrReplaceTempView("SERV_RANK")
-
-    //assigning rank to the original SERVSETD
-    val tempDf =  spark.sql("select a.*, b.rank " +
-      "as Original_Rank from INPUT a inner join SERV_RANK b ON a.SERVSETD = b.SERVSETD order by CASEID")
-    println("this is the temp DF")
-    val a = tempDf.select(tempDf("SERVSETD")  as "cSERVSETD",
-      tempDf("METHUSE"), tempDf("LOS")  as "cLOS", tempDf("SUB1"),  tempDf("ROUTE1"),
-      tempDf("NUMSUBS"), tempDf("DSMCRIT"), tempDf("REASON"),tempDf("Original_Rank"))
-
-    a.show(5)
-    tempDf.createOrReplaceTempView("tempDF")
-    //Creating the new dataset where each failure record will be cross joined to produce all combinations of SERVSETD
-    var NEW_SERVSETD_FAILURE = spark.sql(
-      "select a.*, b.SERVSETD DERIVED_SERV, b.rank RANK " +
-        "from tempDF a cross join SERV_RANK b " +
-        "where a.REASON <> 1 " +
-        "order by CASEID")
-
-  /* val newDF = NEW_SERVSETD_FAILURE.select(NEW_SERVSETD_FAILURE("SERVSETD") + 1 as "cSERVSETD", NEW_SERVSETD_FAILURE("METHUSE"),
-      NEW_SERVSETD_FAILURE("LOS")  as "cLOS", NEW_SERVSETD_FAILURE("SUB1"),
-      NEW_SERVSETD_FAILURE("ROUTE1"), NEW_SERVSETD_FAILURE("NUMSUBS"), NEW_SERVSETD_FAILURE("DSMCRIT"),
-      NEW_SERVSETD_FAILURE("REASON"),NEW_SERVSETD_FAILURE("Original_Rank"))
-      println("input for creating test data")
-      newDF.show(10)
-      NEW_SERVSETD_FAILURE.show(5)
-      //creating data for higher ranks only
-      NEW_SERVSETD_FAILURE.createOrReplaceTempView("final")
-      val finalDF = spark.sql("select a.*, b.CASEID as case` from final a inner join final b ON a.CASEID = b.CASEID AND a.Original_Rank < b.RANK")
-      println("Result of self join")
-      finalDF.show(1)
-      //NEW_SERVSETD_FAILURE.select("CASEID", "REASON","DISYR","SERVSETD","DERIVED_SERV").show(20)
-      //println(NEW_SERVSETD_FAILURE.count())
-      //Saving the dataset
-      NEW_SERVSETD_FAILURE.coalesce(1)
-        .write.format("com.databricks.spark.csv")
-        .option("header", "true")
-        .save("/home/heemany/Documents/treatment/TestData.csv")
-
-  */
-//    predictTreatmentSuccess(someCastedDF, NEW_SERVSETD_FAILURE)
+    //    predictTreatmentSuccess(someCastedDF, NEW_SERVSETD_FAILURE)
 
     predictTreatmentSuccessAndModifySERVSETD(someCastedDF, finalDF)
 
@@ -284,14 +245,14 @@ object SimpleApp {
     val origDf = preOrigDf.withColumn(column, when(col(column).notEqual(1), 0).otherwise(1))
     val changeDf = origDf.select(origDf("CASEID"),origDf("SERVSETD") as "cSERVSETD", origDf("METHUSE"), origDf("LOS")  as "cLOS", origDf("SUB1"),  origDf("ROUTE1"), origDf("NUMSUBS"), origDf("DSMCRIT"), origDf("REASON"))
 
-    val labelIndexer = new StringIndexer().setInputCol("REASON").setOutputCol("label")
-    val labelIndexerModel = labelIndexer.fit(changeDf)
-    val df = labelIndexerModel.transform(changeDf)
+    var labelIndexer = new StringIndexer().setInputCol("REASON").setOutputCol("label")
+    var labelIndexerModel = labelIndexer.fit(changeDf)
+    var df = labelIndexerModel.transform(changeDf)
     //df.show(10)
 
-    val assembler = new VectorAssembler().setInputCols(Array("CASEID", "cSERVSETD", "METHUSE", "cLOS", "SUB1",
+    var assembler = new VectorAssembler().setInputCols(Array("CASEID", "cSERVSETD", "METHUSE", "cLOS", "SUB1",
       "ROUTE1", "NUMSUBS", "DSMCRIT")).setOutputCol("features")
-    val df2 = assembler.transform(df)
+    var df2 = assembler.transform(df)
 
     // Split the data into train and test
     val splits = df2.randomSplit(Array(0.7, 0.3), seed = 1234L)
@@ -307,32 +268,74 @@ object SimpleApp {
       .setFeatureSubsetStrategy("auto")
       .setSeed(5043)
 
-    val model = classifier.fit(trainingData)
+    println("For the original dataset: ")
+    var model = classifier.fit(trainingData)
 //    println("Random Forest Regresser model: " + model.toDebugString)
     println("model.featureImportances: " + model.featureImportances)
 
-    val predictions = model.transform(testData)
+    var predictions = model.transform(testData)
     println("PREDICTIONS:")
     predictions.show(10)
     println("testData.count(): " + testData.count())
 
-    val converter = new IndexToString().setInputCol("prediction")
+    var converter = new IndexToString().setInputCol("prediction")
       .setOutputCol("originalValue")
       .setLabels(labelIndexerModel.labels)
-    val df3 = converter.transform(predictions)
+    var df3 = converter.transform(predictions)
 
     df3.createOrReplaceTempView("Table1")
 
-    val predictionAndLabels = predictions.select("prediction", "label")
-    val evaluator = new MulticlassClassificationEvaluator()
+    var predictionAndLabels = predictions.select("prediction", "label")
+    var evaluator = new MulticlassClassificationEvaluator()
       .setMetricName("accuracy")
 
     println("Test set accuracy = " + evaluator.evaluate(predictionAndLabels))
 
     // Consider all rows whose PREDICTION = 0
     // Consider all rows whose PREDICTION = 0
-    val failedRows = predictions.where(predictions("prediction") === 0.0)
-    increaseSERVSETD(failedRows, model, rankDf)
+    var failedRows = predictions.where(predictions("prediction") === 0.0)
+    //failedRows.show(10)
+    var iter_test = increaseSERVSETD(failedRows, model, rankDf)
+    iter_test.show(5)
+    var i = 2
+    //while(iter_test.count() != 0){
+    while(i < 5){
+      println("    ROUND :  " + i)
+      i = i + 1
+      iter_test = iter_test.drop("cSERVSETD","prediction","rawPrediction", "probability","features")
+      iter_test = iter_test.withColumnRenamed("cSERVSETDNew", "cSERVSETD")
+
+      assembler = new VectorAssembler().setInputCols(Array("CASEID", "cSERVSETD", "METHUSE", "cLOS", "SUB1",
+        "ROUTE1", "NUMSUBS", "DSMCRIT")).setOutputCol("features")
+      iter_test = assembler.transform(iter_test)
+      iter_test.show(10)
+
+      model = classifier.fit(iter_test)
+      //println("Random Forest Regresser model: " + model.toDebugString)
+      println("model.featureImportances: " + model.featureImportances)
+
+      predictions = model.transform(iter_test)
+      println("PREDICTIONS:")
+      predictions.show(10)
+      println("iter_test.count(): " + iter_test.count())
+      df3 = converter.transform(predictions)
+
+      df3.createOrReplaceTempView("Table1")
+
+      predictionAndLabels = predictions.select("prediction", "label")
+      evaluator = new MulticlassClassificationEvaluator()
+        .setMetricName("accuracy")
+      iter_test.createOrReplaceTempView("iterative_test_table")
+
+      println("Test set accuracy = " + evaluator.evaluate(predictionAndLabels))
+      println("prediction 1's count" + predictions.where(predictions("prediction")=== 1.0).count())
+      var successfulConversion =  predictions.where(predictions("prediction")=== 1.0).count()/iter_test.count()
+      println("Successful Conversion Percent" + successfulConversion)
+      failedRows = predictions.where(predictions("prediction") === 0.0)
+      iter_test = increaseSERVSETD(failedRows, model, rankDf)
+
+    }
+
   }
 
 
@@ -346,18 +349,18 @@ object SimpleApp {
 //      cSERVSETD)
 //      .head._2 + 1
     val nextIndex = SERVSETD_to_rank_map.indexOf(cSERVSETD) + 1
-    println("nextIndex: " + nextIndex)
+    //println("nextIndex: " + nextIndex)
     SERVSETD_to_rank_map{nextIndex}
   })
 
   def increaseSERVSETD(failedRows: DataFrame, model:
-  RandomForestClassificationModel, rankDf: DataFrame) = {
+  RandomForestClassificationModel, rankDf: DataFrame): DataFrame = {
 
-    val maxRowd = rankDf.select(max("rowd")).collect() {
+    val maxRowd = rankDf.select(max("rank")).collect() {
       0
-    }.getLong(0)
+    }.getInt(0)
 
-    val hightestSERSETD = rankDf.select("SERVSETD").where(rankDf("rowd") ===
+    val hightestSERSETD = rankDf.select("SERVSETD").where(rankDf("rank") ===
       maxRowd)
       .collect() {
         0
@@ -369,9 +372,9 @@ object SimpleApp {
     val promisingRows = failedRows.filter(failedRows("cSERVSETD") =!=
       hightestSERSETD)
 
-    rankDf.printSchema()
-    println("rankDf:")
-    rankDf.show(100, truncate = false)
+    //rankDf.printSchema()
+    //println("rankDf:")
+    //rankDf.show(100, truncate = false)
     val SERVSETD_to_rank_map =
       rankDf.drop("rank").collect().map(row => row.getInt(0))
 
@@ -382,15 +385,18 @@ object SimpleApp {
 //    promisingRows.drop("cSERVSETD")
 
    val SERVSETD_to_rank_list = SERVSETD_to_rank_map.toSeq
+    print("The list: ",SERVSETD_to_rank_list)
 
    val promisingRowsMod = promisingRows.withColumn("cSERVSETDNew",
       increaseServiceSetting
     (promisingRows("cSERVSETD"), typedLit(SERVSETD_to_rank_list) ))
 
     promisingRowsMod.show(5, truncate = false)
+    return(promisingRowsMod)
 
     // Run the rows of promisingRowsMod through the model to see how many of
     // those are not SUCCESS
+
   }
 
 
