@@ -298,8 +298,7 @@ object SimpleApp {
     var iter_test = increaseSERVSETD(failedRows, model, rankDf)
     iter_test.show(5)
     var i = 2
-    //while(iter_test.count() != 0){
-    while(i < 5){
+    while(iter_test.count() != 0){
       println("    ROUND :  " + i)
       i = i + 1
       iter_test = iter_test.drop("cSERVSETD","prediction","rawPrediction", "probability","features")
