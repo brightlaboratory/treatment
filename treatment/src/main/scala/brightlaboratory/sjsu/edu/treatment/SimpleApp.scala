@@ -294,11 +294,14 @@ object SimpleApp {
     // Consider all rows whose PREDICTION = 0
     // Consider all rows whose PREDICTION = 0
     var failedRows = predictions.where(predictions("prediction") === 0.0)
+    println("Count of failed rows: "+ failedRows.count())
+    println("Count of highest SERVSETD and failed: "+ (predictions.where(predictions("prediction") === 0.0 and predictions("cSERVSETD") === 1)).count())
     //failedRows.show(10)
     var iter_test = increaseSERVSETD(failedRows, model, rankDf)
     iter_test.show(5)
     var i = 2
-    while(iter_test.count() != 0){
+    //while(iter_test.count() != 0){
+    while(i<10){
       println("    ROUND :  " + i)
       i = i + 1
       iter_test = iter_test.drop("cSERVSETD","prediction","rawPrediction", "probability","features")
@@ -327,8 +330,10 @@ object SimpleApp {
       iter_test.createOrReplaceTempView("iterative_test_table")
 
       println("Test set accuracy = " + evaluator.evaluate(predictionAndLabels))
-      println("prediction 1's count" + predictions.where(predictions("prediction")=== 1.0).count())
-      var successfulConversion =  predictions.where(predictions("prediction")=== 1.0).count()/iter_test.count()
+      println("prediction 1's count" + predictions.where(predictions("prediction") === 1.0).count())
+      println("Failure Count" + predictions.where(predictions("prediction") === 0.0).count())
+      println("Count of rows with highest SERVSETD: "+ (predictions.where(predictions("prediction") === 0.0 and predictions("cSERVSETD") === 1)).count())
+      var successfulConversion =  predictions.where(predictions("prediction") === 1.0).count()/iter_test.count()
       println("Successful Conversion Percent" + successfulConversion)
       failedRows = predictions.where(predictions("prediction") === 0.0)
       iter_test = increaseSERVSETD(failedRows, model, rankDf)
