@@ -269,7 +269,7 @@ object SimpleApp {
       .setSeed(5043)
 
     println("For the original dataset: ")
-    var model = classifier.fit(trainingData)
+    val model = classifier.fit(trainingData)
 //    println("Random Forest Regresser model: " + model.toDebugString)
     println("model.featureImportances: " + model.featureImportances)
 
@@ -301,7 +301,7 @@ object SimpleApp {
     iter_test.show(5)
     var i = 2
     //while(iter_test.count() != 0){
-    while(i<10){
+    while(i<3){
       println("    ROUND :  " + i)
       i = i + 1
       iter_test = iter_test.drop("cSERVSETD","prediction","rawPrediction", "probability","features")
@@ -312,7 +312,6 @@ object SimpleApp {
       iter_test = assembler.transform(iter_test)
       iter_test.show(10)
 
-      model = classifier.fit(iter_test)
       //println("Random Forest Regresser model: " + model.toDebugString)
       println("model.featureImportances: " + model.featureImportances)
 
