@@ -14,7 +14,6 @@ import org.apache.spark.sql.functions.typedLit
 
 
 object PredictApp {
-  /*
     def main(args:Array[String]){
       val conf = new SparkConf()
       conf.set("spark.master", "local")
@@ -26,7 +25,6 @@ object PredictApp {
         .getOrCreate()
       SimpleApp.createDataframe(sparkSession)
     }
-      */
 }
 
 object SimpleApp {
@@ -36,7 +34,10 @@ object SimpleApp {
     Logger.getLogger("akka").setLevel(Level.ERROR)
     val df = spark.read
       .option("header", "true") //reading the headers
-      .csv(getClass.getClassLoader.getResource("data.csv").getPath)
+
+      // TODO: Activate the following line when running in IntelliJ
+//      .csv(getClass.getClassLoader.getResource("data.csv").getPath)
+      .csv("file:///usr/local/spark/data.csv")
 
     // Convert all columns into integer
     val someCastedDF = (df.columns.toBuffer).foldLeft(df)((current, c) =>current.withColumn(c, col(c).cast("int")))
